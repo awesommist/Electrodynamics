@@ -1,0 +1,122 @@
+//================================================
+// Pre-execute
+
+buildscript {
+    repositories {
+        // General deps
+        mavenCentral()
+        // Minecraft Forge
+        maven {
+            name = 'Forge'
+            url = 'http://files.minecraftforge.net/maven'
+        }
+        // Sonatype (for SpecialSource in 1.7+)
+        maven {
+            name = "Sonatype Nexus"
+            url = "https://oss.sonatype.org/content/repositories/snapshots/"
+        }
+    }
+
+    dependencies {
+        classpath 'net.minecraftforge.gradle:ForgeGradle:1.2-SNAPSHOT'
+    }
+}
+
+repositories {
+    maven {
+        name 'Forge'
+        url 'http://files.minecraftforge.net/maven'
+    }
+    maven {
+        name 'MinecraftS3'
+        url 'http://s3.amazonaws.com/Minecraft.Download/libraries'
+    }
+}
+
+apply plugin: 'forge'
+
+//================================================
+// Dependencies
+
+dependencies {
+    compile project(':DynamicLib')
+}
+
+//================================================
+// Jar data
+
+version = mod_version + "-" + build_num
+group = "electrodynamics"
+archivesBaseName = mod_name
+
+minecraft {
+    version = mc_ver + "-" + forge_ver
+    runDir = "out/run"
+
+    replace '$VERSION$', mod_version + "-" + build_num
+    replace '$LIB-VERSION$', project(':DynamicLib').lib_version
+    replace '$NEXT-LIB-VERSION$', project(':DynamicLib').next_lib_version
+    replaceIn 'Electrodynamics.java'
+}
+
+processResources {
+    inputs.property "version", version
+
+    from(sourceSets.main.resources.srcDirs) {
+        include '**/*.info'
+        expand 'version':version,'MCVersion':mc_ver
+    }
+
+    from(sourceSets.main.resources.srcDirs) {
+        exclude '**/*.info'
+    }
+}
+
+//================================================
+// Jar tasks
+
+task devJar(type: Jar, dependsOn: 'classes') {
+    from(sourceSets.main.output) {
+        include '**'
+    }
+
+    extension = 'jar'
+    classifier = 'dev'
+}
+
+//================================================
+// Misc stuff
+
+task incrementBuildNumber(dependsOn: 'reobf') {
+    def configFile = file('gradle.properties')
+    def config = parseConfig(configFile)
+
+    config.build_num = (config.build_num.toString().toInteger()) + 1
+    configFile.withWriter {
+        config.toProperties().store(it, "")
+    }
+
+    file('web/versions.ini').append("\n${version}=${mc_ver}")
+    file("version/${mc_ver}.txt").write("${version}")
+}
+
+def parseConfig(File config) {
+    config.withReader {
+        def prop = new Properties()
+        prop.load(it)
+        return (new ConfigSlurper().parse(prop))
+    }
+}
+
+artifacts {
+    archives devJar
+}
+
+sourceSets {
+    main {
+        output.resourcesDir = output.classesDir
+    }
+}
+
+tasks.build.dependsOn tasks.incrementBuildNumber
+defaultTasks 'clean', 'build'
